@@ -53,6 +53,17 @@ function evaluationInfo(assignment_data) {
         .filter(({type}) => type === 'exam-questions')
         .map(o => [o.relationships['exam-master-question'].data.id, o])
     );
+    const questionToMaster = Object.fromEntries(Object.entries(masterToQuestion).map(([k, v]) => [v.id, k]))
+    const masterToAnnotations = (
+        assignment_data.included
+        .filter(({type}) => type == 'annotations')
+        .map(o => [questionToMaster[o.relationships['exam-question'].data.id], o])
+        .reduce((acc, [masterId, annotation]) => {
+            if (!(masterId in acc)) acc[masterId] = [];
+            acc[masterId].push(annotation.attributes);
+            return acc;
+        }, {})
+    );
     const out = Object.fromEntries(
         assignment_data.included
         .filter(({type}) => type === 'exam-master-questions')
@@ -62,7 +73,7 @@ function evaluationInfo(assignment_data) {
             }
             const {attributes: {points: score}} = masterToQuestion[id];
             return [
-                label, {score, outOf}
+                label, {score, outOf, annotations: masterToAnnotations[id]}
             ];
         })
     );
