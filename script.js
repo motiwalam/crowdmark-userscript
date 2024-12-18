@@ -48,19 +48,19 @@ async function retrieveAllAssignmentData(assignment_ids) {
 }
 
 function evaluationInfo(assignment_data) {
-    const questionToEval = Object.fromEntries(
+    const masterToQuestion = Object.fromEntries(
         assignment_data.included
-        .filter(({type}) => type === 'evaluations')
-        .map(o => [o.relationships['exam-question'].data.id, o])
+        .filter(({type}) => type === 'exam-questions')
+        .map(o => [o.relationships['exam-master-question'].data.id, o])
     );
     const out = Object.fromEntries(
         assignment_data.included
-        .filter(({type}) => type === 'exam-questions')
+        .filter(({type}) => type === 'exam-master-questions')
         .map(({id, attributes: {label, points: outOf}}) => {
-            if (questionToEval[id] === undefined) {
+            if (masterToQuestion[id] === undefined) {
                 return [label, {score: undefined, outOf: undefined}];
             }
-            const {attributes: {points: score}} = questionToEval[id];
+            const {attributes: {points: score}} = masterToQuestion[id];
             return [
                 label, {score, outOf}
             ];
