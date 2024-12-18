@@ -28,6 +28,81 @@ function statistics(results, outOf) {
     }
 }
 
+async function getAssignmentIDS() {
+    return await fetch("https://app.crowdmark.com/api/v2/student/assignments?fields%5Bexam-masters%5D%5B%5D=type&fields%5Bexam-masters%5D%5B%5D=title", {
+        "credentials": "include",
+        "referrer": "https://app.crowdmark.com/student/course-archive",
+        "method": "GET",
+        "mode": "cors"
+    }).then(r => r.json()).then(r => r.data.map(o => o.id));
+}
+
+async function getAssignmentData(assignment_id) {
+    return await fetch("https://app.crowdmark.com/api/v1/student/results/" + assignment_id).then(r => r.json());
+}
+
+async function retrieveAllAssignmentData(assignment_ids) {
+    return await Promise.all(
+        assignment_ids.map(getAssignmentData)
+    )
+}
+
+function evaluationInfo(assignment_data) {
+    const questionToEval = Object.fromEntries(
+        assignment_data.included
+        .filter(({type}) => type === 'evaluations')
+        .map(o => [o.relationships['exam-question'].data.id, o])
+    );
+    const out = Object.fromEntries(
+        assignment_data.included
+        .filter(({type}) => type === 'exam-questions')
+        .map(({id, attributes: {label, points: outOf}}) => {
+            if (questionToEval[id] === undefined) {
+                return [label, {score: undefined, outOf: undefined}];
+            }
+            const {attributes: {points: score}} = questionToEval[id];
+            return [
+                label, {score, outOf}
+            ];
+        })
+    );
+
+    return out;
+}
+
+function summarizeAssignmentData(assignment_data) {
+    const course = assignment_data.included.filter(o => o.type === "courses")[0].attributes;
+    const attrs = assignment_data.included.filter(o => o.type === "exam-masters")[0].attributes;
+    const outOf = Number(attrs['total-points']);
+    const results = attrs.results?.sort((a,b) => a-b);
+    const evaluation = evaluationInfo(assignment_data);
+    return {
+        courseName: course.name,
+        title: attrs.title,
+        outOf: outOf,
+        results: results,
+        ...(results && statistics(results, outOf)),
+        evaluation,
+    };
+}
+
+function summarizeAllAssignmentData(assignment_datas) {
+    const out = {};
+    for (const assignment_data of assignment_datas) {
+        const {courseName, title, ...summary} = summarizeAssignmentData(assignment_data);
+        if (!(courseName in out)) out[courseName] = {};
+        out[courseName][title] = summary;
+    }
+    return out;
+}
+
+async function getCompleteSummary() {
+    const ids = await getAssignmentIDS();
+    const data = await retrieveAllAssignmentData(ids);
+    const totalSum = summarizeAllAssignmentData(data);
+    return totalSum;
+}
+
 async function getCourseInfo() {
     const out = [];
     let page = 1;
@@ -58,56 +133,6 @@ async function getCourseStatistics(course_id) {
         "method": "GET",
         "mode": "cors"
     }).then(r => r.json());
-}
-
-async function getAssignmentIDS() {
-    return await fetch("https://app.crowdmark.com/api/v2/student/assignments?fields%5Bexam-masters%5D%5B%5D=type&fields%5Bexam-masters%5D%5B%5D=title", {
-        "credentials": "include",
-        "referrer": "https://app.crowdmark.com/student/course-archive",
-        "method": "GET",
-        "mode": "cors"
-    }).then(r => r.json()).then(r => r.data.map(o => o.id));
-}
-
-async function getAssignmentData(assignment_id) {
-    return await fetch("https://app.crowdmark.com/api/v1/student/results/" + assignment_id).then(r => r.json());
-}
-
-async function retrieveAllAssignmentData(assignment_ids) {
-    return await Promise.all(
-        assignment_ids.map(getAssignmentData)
-    )
-}
-
-function summarizeAssignmentData(assignment_data) {
-    const course = assignment_data.included.filter(o => o.type === "courses")[0].attributes;
-    const attrs = assignment_data.included.filter(o => o.type === "exam-masters")[0].attributes;
-    const outOf = Number(attrs['total-points']);
-    const results = attrs.results?.sort((a,b) => a-b);
-    return {
-        courseName: course.name,
-        title: attrs.title,
-        outOf: outOf,
-        results: results,
-        ...(results && statistics(results, outOf)),
-    };
-}
-
-function summarizeAllAssignmentData(assignment_datas) {
-    const out = {};
-    for (const assignment_data of assignment_datas) {
-        const {courseName, title, ...summary} = summarizeAssignmentData(assignment_data);
-        if (!(courseName in out)) out[courseName] = {};
-        out[courseName][title] = summary;
-    }
-    return out;
-}
-
-async function getCompleteSummary() {
-    const ids = await getAssignmentIDS();
-    const data = await retrieveAllAssignmentData(ids);
-    const totalSum = summarizeAllAssignmentData(data);
-    return totalSum;
 }
 
 async function getAllPerfReports() {
