@@ -94,6 +94,7 @@ function summarizeAssignmentData(assignment_data) {
         results: results,
         ...(results && statistics(results, outOf)),
         evaluation,
+        uuid: assignment_data.data.id,
     };
 }
 
