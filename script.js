@@ -180,3 +180,25 @@ async function compareAverages() {
     
     return out;
 }
+
+async function watch(fn, timeout_secs) {
+    if (Notification.permission !== "granted") {
+        throw new Error("need notification permission");
+    }
+    // use singleton array as a sort of pointer
+    const dataptr = [await fn()];
+    const term = setInterval(async () => {
+        const oldData = dataptr[0];
+        const newData = await fn();
+        if (JSON.stringify(oldData) !== JSON.stringify(newData)) {
+            const n = new Notification("Data Changed!");
+            setTimeout(() => n.close(), 5000);
+        }
+        dataptr[0] = newData;
+    }, timeout_secs * 1000);
+
+    return {
+        stop() { clearInterval(term); },
+        data() { return dataptr[0]; }
+    }
+}
