@@ -10,8 +10,8 @@ Run `await getAllPerfReports()` to get the "performance reports" for every class
 The following code can watch for changes to crowdmark data and notify you.
 
 ```js
-// compute complete summary every 10 seconds
-const watcher = await watch(getCompleteSummary, 10);
+// compute complete summary every 60 seconds
+const watcher = await watch(getCompleteSummary, 60, diffCompleteSummary);
 watcher.data() // see the current data state
 // use watcher.stop() to stop the watcher
 // or just reload the page

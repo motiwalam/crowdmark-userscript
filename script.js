@@ -181,7 +181,20 @@ async function compareAverages() {
     return out;
 }
 
-async function watch(fn, timeout_secs) {
+function diffCompleteSummary(oldSummary, newSummary) {
+    // assumes no new courses/assgts
+    let diff = "";
+    for (const [courseName, assgts] of Object.entries(oldSummary)) {
+        for (const [assgtName, assgt] of Object.entries(assgts)) {
+            if (JSON.stringify(assgt) !== JSON.stringify(newSummary?.[courseName]?.[assgtName])) {
+                diff += `${assgtName} in ${courseName}\n`
+            }
+        }
+    }
+    return diff;
+}
+
+async function watch(fn, timeout_secs, diff) {
     if (Notification.permission !== "granted") {
         throw new Error("need notification permission");
     }
@@ -191,7 +204,9 @@ async function watch(fn, timeout_secs) {
         const oldData = dataptr[0];
         const newData = await fn();
         if (JSON.stringify(oldData) !== JSON.stringify(newData)) {
-            const n = new Notification("Data Changed!");
+            const n = new Notification("Data Changed!", {
+                body: diff && await diff(oldData, newData),
+            });
             setTimeout(() => n.close(), 5000);
         }
         dataptr[0] = newData;
