@@ -95,6 +95,7 @@ function summarizeAssignmentData(assignment_data) {
         ...(results && statistics(results, outOf)),
         evaluation,
         uuid: assignment_data.data.id,
+        scoreLink: `https://app.crowdmark.com/score/${assignment_data.data.id}`
     };
 }
 
