@@ -1,3 +1,16 @@
+// ==UserScript==
+// @name        Crowdmark Score Unlock
+// @namespace   Violentmonkey Scripts
+// @match       *://app.crowdmark.com/student/*
+// @grant       none
+// @version     1.0
+// @author      Mustafa Motiwala
+// @description Add a link to Crowdmark assessments to display grading information, even if marks have not been released.
+// ==/UserScript==
+
+const EM2UUID = Symbol("EM2UUID");
+const SCORELINKID = "crowdmark-userscript-scorelink-id-hehe";
+
 function singlePrecision(x) {
     return Math.round(10 * x) / 10;
 }
@@ -25,16 +38,20 @@ function statistics(results, outOf) {
     return {
         meanPercent, medianPercent, stdevPercent,
         meanPoints, medianPoints, stdevPoints,
-    }
+    };
 }
 
-async function getAssignmentIDS() {
+async function getGlobalAssignmentInfo() {
     return await fetch("https://app.crowdmark.com/api/v2/student/assignments?fields%5Bexam-masters%5D%5B%5D=type&fields%5Bexam-masters%5D%5B%5D=title", {
         "credentials": "include",
         "referrer": "https://app.crowdmark.com/student/course-archive",
         "method": "GET",
         "mode": "cors"
-    }).then(r => r.json()).then(r => r.data.map(o => o.id));
+    }).then(r => r.json());
+}
+
+async function getAssignmentIDS() {
+    return await getGlobalAssignmentInfo().then(r => r.data.map(o => o.id));
 }
 
 async function getAssignmentData(assignment_id) {
@@ -44,7 +61,7 @@ async function getAssignmentData(assignment_id) {
 async function retrieveAllAssignmentData(assignment_ids) {
     return await Promise.all(
         assignment_ids.map(getAssignmentData)
-    )
+    );
 }
 
 function evaluationInfo(assignment_data) {
@@ -53,7 +70,7 @@ function evaluationInfo(assignment_data) {
         .filter(({type}) => type === 'exam-questions')
         .map(o => [o.relationships['exam-master-question'].data.id, o])
     );
-    const questionToMaster = Object.fromEntries(Object.entries(masterToQuestion).map(([k, v]) => [v.id, k]))
+    const questionToMaster = Object.fromEntries(Object.entries(masterToQuestion).map(([k, v]) => [v.id, k]));
     const masterToAnnotations = (
         assignment_data.included
         .filter(({type}) => type == 'annotations')
@@ -95,7 +112,8 @@ function summarizeAssignmentData(assignment_data) {
         ...(results && statistics(results, outOf)),
         evaluation,
         uuid: assignment_data.data.id,
-        scoreLink: `https://app.crowdmark.com/score/${assignment_data.data.id}`
+        scoreLink: `https://app.crowdmark.com/score/${assignment_data.data.id}`,
+        examMasterId: assignment_data?.data?.relationships?.["exam-master"]?.data?.id
     };
 }
 
@@ -129,8 +147,8 @@ async function getCourseInfo() {
         out.push(...resp.data.map(o => ({
             id: o.id,
             name: o.attributes.name,
-        })))
-        
+        })));
+
         page++;
 
         if (resp.meta.pagination['total-pages'] <= page) {
@@ -152,7 +170,7 @@ async function getAllPerfReports() {
     const courses = await getCourseInfo();
     const allStats = Object.fromEntries(await Promise.all(
         courses.map(({id}) => getCourseStatistics(id).then(r => [id, r]))
-    ))
+    ));
     const out = {};
     for (const {id, name} of courses) {
         const stats = allStats[id];
@@ -178,17 +196,17 @@ async function compareAverages() {
             };
         }
     }
-    
+
     return out;
 }
 
 function diffCompleteSummary(oldSummary, newSummary) {
-    // assumes no new courses/assgts
+    /* assumes no new courses/assgts */
     let diff = "";
     for (const [courseName, assgts] of Object.entries(oldSummary)) {
         for (const [assgtName, assgt] of Object.entries(assgts)) {
             if (JSON.stringify(assgt) !== JSON.stringify(newSummary?.[courseName]?.[assgtName])) {
-                diff += `${assgtName} in ${courseName}\n`
+                diff += `${assgtName} in ${courseName}\n`;
             }
         }
     }
@@ -199,7 +217,7 @@ async function watch(fn, timeout_secs, diff) {
     if (Notification.permission !== "granted") {
         throw new Error("need notification permission");
     }
-    // use singleton array as a sort of pointer
+    /* use singleton array as a sort of pointer */
     const dataptr = [await fn()];
     const term = setInterval(async () => {
         const oldData = dataptr[0];
@@ -216,5 +234,47 @@ async function watch(fn, timeout_secs, diff) {
     return {
         stop() { clearInterval(term); },
         data() { return dataptr[0]; }
-    }
+    };
 }
+
+async function getAssignmentExamMasterToUUID() {
+    const assignment_ids = await getAssignmentIDS();
+    const assignment_datas = await retrieveAllAssignmentData(assignment_ids);
+
+    return Object.fromEntries(
+        assignment_datas.map(o => {
+            return [o?.data?.relationships?.['exam-master']?.data?.id, o?.data?.id]
+        })
+    );
+}
+
+function createScoreLink(uuid) {
+    const aTag = document.createElement('a');
+    aTag.id = SCORELINKID;
+    aTag.href = `https://app.crowdmark.com/score/${uuid}`;
+    aTag.innerText = "Shareable link";
+    aTag.target = "_blank";
+    return aTag;
+}
+
+function installScoreLink(uuid) {
+    const header = document.getElementsByClassName('cm-assignment__header-top-content')[0];
+    header?.appendChild(createScoreLink(uuid));
+}
+
+function getCurrentAssignmentUUID(em2uuid) {
+    const examMasterId = window.location.pathname.split('/').at(-1);
+    return em2uuid[examMasterId];
+}
+
+async function installScoreUnlocker(period_secs=1) {
+    window[EM2UUID] = await getAssignmentExamMasterToUUID();
+    return setInterval(() => {
+        if (document.getElementById(SCORELINKID) === null) {
+            const uuid = getCurrentAssignmentUUID(window[EM2UUID]);
+            if (uuid) installScoreLink(uuid);
+        }
+    }, period_secs * 1000);
+}
+
+installScoreUnlocker();
