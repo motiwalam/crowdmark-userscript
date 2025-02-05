@@ -1,5 +1,5 @@
 # Crowdmark Userscript
-This script contains several useful utility functions to download complete performance data, as well as functionality to show assessment grades before they've been released.
+This script contains several useful utility functions to download complete performance data, ~as well as functionality to show assessment grades before they've been released~ (this was patched by crowdmark and no longer works).
 
 Most of the code depends on being run in a browser window that has already been authenticated against the Crowdmark API.
 
